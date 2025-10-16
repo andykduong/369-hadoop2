@@ -51,7 +51,7 @@ public class HadoopApp {
 		Path joinJobOutput = new Path("temp_join_output" );
 		Path aggregateJobOutput = new Path("temp_aggregate_output");
 
-		// --- JOB 1: Join logs with countries ---
+		//join logs with countries
 		Configuration joinConf = new Configuration();
 		joinConf.set("mapreduce.input.keyvaluelinerecordreader.key.value.separator", ",");
 		Job joinJob = Job.getInstance(joinConf, "Join Logs with Countries");
@@ -64,7 +64,7 @@ public class HadoopApp {
 		joinJob.setOutputValueClass(Text.class);
 		FileOutputFormat.setOutputPath(joinJob, joinJobOutput);
 		
-		joinJob.waitForCompletion(true)
+		joinJob.waitForCompletion(true);
 
 		//aggregate
 		Configuration aggConf = new Configuration();
@@ -76,12 +76,12 @@ public class HadoopApp {
 		FileInputFormat.addInputPath(aggregateJob, joinJobOutput);
 		FileOutputFormat.setOutputPath(aggregateJob, aggregateJobOutput);
 
-		aggregateJob.waitForCompletion(true)
+		aggregateJob.waitForCompletion(true);
 
 		//sort
 		Configuration sortConf = new Configuration();
 		Job sortJob = Job.getInstance(sortConf, "Sort Country Counts");
-		sortJob.setJarByClass(HadoopApp.class);
+		// sortJob.setJarByClass(HadoopApp.class);
 		sortJob.setInputFormatClass(KeyValueTextInputFormat.class);
 
 		sortJob.setMapperClass(Sort.SortMapper.class);
@@ -97,6 +97,62 @@ public class HadoopApp {
 
     	System.exit(sortJob.waitForCompletion(true) ? 0 : 1);
 
+
+	} else if ("CountryURLCount".equalsIgnoreCase(otherArgs[0])) {
+
+		Path csvInput = new Path(args[1]);
+		Path logInput = new Path(args[2]);
+		Path finalOutputPath = new Path(args[3]);
+		Path joinJobOutput = new Path("temp_join_output" );
+		Path aggregateJobOutput = new Path("temp_aggregate_output");
+
+		//join logs with countries
+		Configuration joinConf = new Configuration();
+		joinConf.set("mapreduce.input.keyvaluelinerecordreader.key.value.separator", ",");
+		Job joinJob = Job.getInstance(joinConf, "Join URL Logs with Countries");
+
+		MultipleInputs.addInputPath(joinJob, csvInput, KeyValueTextInputFormat.class, CountryURLCount.CountryMapper.class);
+		MultipleInputs.addInputPath(joinJob, logInput, TextInputFormat.class, CountryURLCount.IP_URLMapper.class);
+		
+		joinJob.setReducerClass(CountryURLCount.JoinReducer.class);
+		joinJob.setOutputKeyClass(Text.class);
+		joinJob.setOutputValueClass(Text.class);
+		FileOutputFormat.setOutputPath(joinJob, joinJobOutput);
+		
+		joinJob.waitForCompletion(true);
+
+		//aggregate
+		Configuration aggConf = new Configuration();
+		Job aggregateJob = Job.getInstance(aggConf, "Aggregate Country Counts");
+		aggregateJob.setInputFormatClass(KeyValueTextInputFormat.class);
+		aggregateJob.setMapperClass(URLAggregator.AggregatorMapper.class);
+		aggregateJob.setReducerClass(URLAggregator.AggregatorReducer.class);
+		aggregateJob.setOutputKeyClass(Text.class);
+		aggregateJob.setOutputValueClass(IntWritable.class);
+		FileInputFormat.addInputPath(aggregateJob, joinJobOutput);
+		FileOutputFormat.setOutputPath(aggregateJob, aggregateJobOutput);
+
+		aggregateJob.waitForCompletion(true);
+
+		//sort
+		Configuration sortConf = new Configuration();
+		Job sortJob = Job.getInstance(sortConf, "Sort URLs by Country and Count");
+		sortJob.setInputFormatClass(KeyValueTextInputFormat.class);
+
+		sortJob.setMapperClass(URLSort.SortMapper.class);
+		sortJob.setPartitionerClass(URLSort.CountryPartitioner.class);
+		sortJob.setGroupingComparatorClass(URLSort.CountryGroupingComparator.class);
+		sortJob.setReducerClass(URLSort.SortReducer.class);
+		
+		sortJob.setMapOutputKeyClass(URLSort.CountryCountWritable.class);
+		sortJob.setMapOutputValueClass(Text.class);
+		sortJob.setOutputKeyClass(Text.class);
+		sortJob.setOutputValueClass(Text.class);
+
+		FileInputFormat.addInputPath(sortJob, aggregateJobOutput);
+		FileOutputFormat.setOutputPath(sortJob, finalOutputPath);
+
+		System.exit(sortJob.waitForCompletion(true) ? 0 : 1);
 
 	} else if ("WordCount".equalsIgnoreCase(otherArgs[0])) {
 	    job.setReducerClass(WordCount.ReducerImpl.class);
